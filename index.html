@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Living Law TV Player</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: #fff; font-family: Arial, sans-serif; }
+  #player { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 28px; opacity: .7; }
+</style>
+</head>
+<body>
+<div id="msg">Living Law TV Player</div>
+<div id="player"></div>
+<script>
+  // Living Law TV player: shows one YouTube video full screen.
+  //   ?v=VIDEO_ID           play a video
+  //   ?list=PLAYLIST_ID     play a playlist
+  // The TV in BeamNG embeds this page; it can also send commands with postMessage:
+  //   { llTv: 'play' | 'pause' | 'toggle' | 'next' | 'prev' | 'volume', value: 0-100 }
+  //   { llTv: 'load', v: VIDEO_ID } / { llTv: 'loadList', list: PLAYLIST_ID }
+  var q = new URLSearchParams(location.search)
+  var startId = q.get('v'), startList = q.get('list')
+  var player = null
+
+  var tag = document.createElement('script')
+  tag.src = 'https://www.youtube.com/iframe_api'
+  document.head.appendChild(tag)
+
+  function onYouTubeIframeAPIReady() {
+    if (!startId && !startList) return
+    document.getElementById('msg').style.display = 'none'
+    var vars = { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1, origin: location.origin }
+    if (startList) { vars.listType = 'playlist'; vars.list = startList }
+    player = new YT.Player('player', {
+      width: '100%', height: '100%', videoId: startId || undefined, playerVars: vars,
+      events: {
+        onReady: function (e) { e.target.playVideo(); tell('ready') },
+        onStateChange: function (e) { tell('state', e.data) },
+        onError: function (e) { tell('error', e.data); document.getElementById('msg').style.display = 'flex'; document.getElementById('msg').textContent = 'This video can\'t be played here (error ' + e.data + ')' }
+      }
+    })
+  }
+
+  function tell(what, value) {
+    try { window.parent.postMessage({ llTvPlayer: what, value: value }, '*') } catch (e) {}
+  }
+
+  window.addEventListener('message', function (e) {
+    var d = e.data || {}
+    if (!player || !d.llTv) return
+    if (d.llTv === 'play') player.playVideo()
+    else if (d.llTv === 'pause') player.pauseVideo()
+    else if (d.llTv === 'toggle') { player.getPlayerState() === 1 ? player.pauseVideo() : player.playVideo() }
+    else if (d.llTv === 'next') player.nextVideo()
+    else if (d.llTv === 'prev') player.previousVideo()
+    else if (d.llTv === 'volume') { player.unMute(); player.setVolume(d.value) }
+    else if (d.llTv === 'load') player.loadVideoById(d.v)
+    else if (d.llTv === 'loadList') player.loadPlaylist({ listType: 'playlist', list: d.list })
+  })
+</script>
+</body>
+</html>
